@@ -9,13 +9,15 @@ set -euo pipefail
 
 : "${PORT:=8000}"
 : "${ORCHESTRATOR_PORT:=8100}"
+# Binding :: is not a safe default: whether a v6 socket also accepts IPv4
+# depends on the container's bindv6only setting, and both Railway's edge proxy
+# and its private DNS hand out IPv4. Overridable in case a platform needs v6.
+: "${BIND_HOST:=0.0.0.0}"
 
-# Bind :: rather than 0.0.0.0 — Railway's private network is IPv6-only, and a
-# dual-stack listener still accepts the public IPv4 traffic from the edge proxy.
-python -m uvicorn master_orchestrator.app:app --host :: --port "$ORCHESTRATOR_PORT" &
+python -m uvicorn master_orchestrator.app:app --host "$BIND_HOST" --port "$ORCHESTRATOR_PORT" &
 orchestrator_pid=$!
 
-python -m uvicorn dashboard.api.app:app --host :: --port "$PORT" &
+python -m uvicorn dashboard.api.app:app --host "$BIND_HOST" --port "$PORT" &
 dashboard_pid=$!
 
 # Exit as soon as either process does, so the platform restarts the whole
