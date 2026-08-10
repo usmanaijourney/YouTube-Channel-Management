@@ -4,11 +4,12 @@ Manager asks "can I have a production slot now?" over HTTP RPC (doc §5).
 from __future__ import annotations
 
 import asyncio
+import os
 from typing import Optional
 
 import httpx
 
-DEFAULT_ORCHESTRATOR_URL = "http://localhost:8100"
+DEFAULT_ORCHESTRATOR_URL = os.environ.get("ORCHESTRATOR_URL", "http://localhost:8100")
 MAX_ATTEMPTS = 5
 BASE_BACKOFF_SECONDS = 1.0
 

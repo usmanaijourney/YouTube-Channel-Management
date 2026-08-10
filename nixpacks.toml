@@ -1,0 +1,5 @@
+# ffmpeg/ffprobe are not in the base image, and /api/integrations really shells
+# out to both (dashboard/api/health_checks.py) rather than reporting a canned
+# status — without them the Integrations page reports a genuine error.
+[phases.setup]
+aptPkgs = ["ffmpeg"]

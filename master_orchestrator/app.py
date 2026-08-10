@@ -61,6 +61,9 @@ async def _monitoring_loop() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    # A fresh deployment boots against an empty volume; without this the very
+    # first monitoring cycle fails on missing tables. No-op on an existing DB.
+    await db.init_db(DB_PATH)
     task = asyncio.create_task(_monitoring_loop())
     try:
         yield

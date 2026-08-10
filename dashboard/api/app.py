@@ -4,7 +4,8 @@ Run with: uvicorn dashboard.api.app:app --reload --port 8000
 """
 from __future__ import annotations
 
-from typing import Optional
+from contextlib import asynccontextmanager
+from typing import AsyncIterator, Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Query
 
@@ -17,7 +18,25 @@ from dashboard.api.auth import require_api_key
 # Module-level so tests can monkeypatch it to point at a seeded temp DB.
 DB_PATH = DEFAULT_DB_PATH
 
-app = FastAPI(title="YouTube Orchestration Dashboard API", dependencies=[Depends(require_api_key)])
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    """Apply migrations on boot.
+
+    Locally the DB always exists because `run.py` created it, but a fresh
+    deployment starts with an empty volume and nothing else would create the
+    schema — every read endpoint would fail on a missing table. The migrations
+    are `CREATE ... IF NOT EXISTS`, so this is a no-op on an existing DB.
+    """
+    await db.init_db(DB_PATH)
+    yield
+
+
+app = FastAPI(
+    title="YouTube Orchestration Dashboard API",
+    dependencies=[Depends(require_api_key)],
+    lifespan=lifespan,
+)
 
 
 @app.get("/api/system/health")

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, AsyncIterator, Optional
@@ -10,7 +11,10 @@ import aiosqlite
 _MIGRATIONS_DIR = Path(__file__).parent / "migrations"
 _MIGRATION_FILES = ["0001_initial.sql", "0002_dashboard_foundation.sql", "0003_orchestrator.sql"]
 
-DEFAULT_DB_PATH = "youtube_orchestration.db"
+# `DB_PATH` lets a deployment point the SQLite file at a mounted volume
+# (e.g. /data/youtube_orchestration.db on Railway) instead of the repo-relative
+# default, which would live on an ephemeral container filesystem.
+DEFAULT_DB_PATH = os.environ.get("DB_PATH", "youtube_orchestration.db")
 
 
 @asynccontextmanager
@@ -18,6 +22,12 @@ async def connect(db_path: str) -> AsyncIterator[aiosqlite.Connection]:
     conn = await aiosqlite.connect(db_path)
     conn.row_factory = aiosqlite.Row
     try:
+        # WAL + a busy timeout because the dashboard API and the Master
+        # Orchestrator are separate processes writing the same file (they share
+        # a volume in deployment); without these, a health-check write landing
+        # during an orchestrator cycle can fail outright with "database is locked".
+        await conn.execute("PRAGMA journal_mode = WAL")
+        await conn.execute("PRAGMA busy_timeout = 5000")
         await conn.execute("PRAGMA foreign_keys = ON")
         yield conn
     finally:

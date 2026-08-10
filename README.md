@@ -61,6 +61,33 @@ Add `--auto-approve` to skip the interactive approval gates, or `--no-orchestrat
 
 `tests/integration/` requires ffmpeg and live service credentials.
 
+## Deploy (Railway)
+
+Two services off this one repo. The dashboard API and the Master Orchestrator run **in the same service** — they share one SQLite file, and a Railway volume attaches to exactly one service, so they cannot be split without moving to Postgres first.
+
+The video pipeline (`run.py`) stays local. It needs ffmpeg, the YouTube OAuth token in `secrets/`, and answers to its interactive approval gates — none of which survive a container, and nothing triggers it on a schedule yet.
+
+**Service 1 — backend** (root directory `/`)
+
+| Variable | Value |
+|---|---|
+| `DASHBOARD_API_KEY` | a long random string; the frontend needs the same value |
+| `DB_PATH` | `/data/youtube_orchestration.db` |
+| `PORT` | `8000` |
+
+Attach a volume mounted at `/data`, or every redeploy starts from an empty database. [railway.json](railway.json) and [nixpacks.toml](nixpacks.toml) supply the start command and pull in ffmpeg (`/api/integrations` really shells out to it). Both processes are started by [scripts/start_backend.sh](scripts/start_backend.sh).
+
+**Service 2 — frontend** (root directory `frontend`)
+
+| Variable | Value |
+|---|---|
+| `BACKEND_API_BASE_URL` | `http://<backend-service>.railway.internal:8000` |
+| `BACKEND_API_KEY` | same value as `DASHBOARD_API_KEY` |
+
+Generate a public domain for this service only. The backend needs no public domain — the browser never talks to it directly, only the frontend's server-side proxy route does. If private networking gives you trouble, the backend's own public URL works as `BACKEND_API_BASE_URL` too; the API is key-protected either way.
+
+**What reports as unavailable in a deployment:** the Integrations page shows `youtube_api` as an error, because the OAuth refresh token lives in `secrets/` on your machine and is never committed. The dashboard is read-only, so this affects nothing else.
+
 ## Status
 
 Phase 0 MVP. All three approval gates (topic, script, pre-upload) are on by default, the dashboard is read-only, and runs are triggered manually — there is no automatic scheduler yet. Known gaps are listed in [frontend/README.md](frontend/README.md#known-limitations).
