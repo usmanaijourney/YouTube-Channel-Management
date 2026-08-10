@@ -1,0 +1,33 @@
+import {
+  Activity,
+  AlertTriangle,
+  BarChart3,
+  Bot,
+  Cpu,
+  FileText,
+  Gauge,
+  ListTree,
+  Plug,
+  Radio,
+  Server,
+  Settings,
+  Tv,
+  Workflow,
+} from "lucide-react";
+
+export const NAV_ITEMS = [
+  { href: "/overview", label: "Overview", icon: Gauge },
+  { href: "/orchestrator", label: "Orchestrator", icon: Cpu },
+  { href: "/channels", label: "Channels", icon: Tv },
+  { href: "/agents", label: "Agents", icon: Bot },
+  { href: "/workflows", label: "Workflows", icon: Workflow },
+  { href: "/tasks", label: "Tasks", icon: ListTree },
+  { href: "/production", label: "Production", icon: Activity },
+  { href: "/analytics", label: "Analytics", icon: BarChart3 },
+  { href: "/alerts", label: "Alerts", icon: AlertTriangle },
+  { href: "/logs", label: "Logs", icon: FileText },
+  { href: "/schedules", label: "Schedules", icon: Radio },
+  { href: "/integrations", label: "Integrations", icon: Plug },
+  { href: "/infrastructure", label: "Infrastructure", icon: Server },
+  { href: "/settings", label: "Settings", icon: Settings },
+] as const;

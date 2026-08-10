@@ -1,0 +1,37 @@
+channel_id: channel-001
+name: "TechExplained Daily"
+niche: "consumer tech explainers"
+status: active
+
+schedule:
+  videos_per_day: 2
+  preferred_hours_utc: [9, 16]
+
+content_strategy:
+  target_audience: "18-34, tech-curious, non-expert"
+  tone: "energetic, clear, slightly humorous"
+  video_length_minutes: [6, 9]
+  approval_gates:
+    topic: true
+    script: true
+    pre_upload: true      # MVP (§20/§25 step 4): all gates ON until the pipeline is trusted
+
+voice:
+  provider: edge-tts
+  voice_id: "en-US-AriaNeural"
+  pace: "medium"
+
+visual_style:
+  template: "clean-tech-v2"
+  brand_colors: ["#0B0B0F", "#38BDF8"]
+  asset_source: stock_then_generated
+
+credentials_ref:
+  youtube: "channel-001/youtube_oauth"
+  whatsapp_recipient: "channel-001/whatsapp_notify_target"
+
+notifications:
+  on_upload_success: true
+  on_failure: true
+  daily_summary: true
+  weekly_summary: true
