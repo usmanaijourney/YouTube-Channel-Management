@@ -75,7 +75,9 @@ The video pipeline (`run.py`) stays local. It needs ffmpeg, the YouTube OAuth to
 | `DB_PATH` | `/data/youtube_orchestration.db` |
 | `PORT` | `8000` |
 
-Attach a volume mounted at `/data`, or every redeploy starts from an empty database. [railway.json](railway.json) and [nixpacks.toml](nixpacks.toml) supply the start command and pull in ffmpeg (`/api/integrations` really shells out to it). Both processes are started by [scripts/start_backend.sh](scripts/start_backend.sh).
+Attach a volume mounted at `/data`, or every redeploy starts from an empty database. Both processes are started by [scripts/start_backend.sh](scripts/start_backend.sh), which binds `0.0.0.0` — binding `::` returns 502 on every request even though uvicorn logs a healthy bind, because a v6 socket only accepts IPv4 connections when the container's `bindv6only` is off. `BIND_HOST` overrides it.
+
+[railway.json](railway.json) and [nixpacks.toml](nixpacks.toml) carry the start command and an ffmpeg package. The platform may pick its own builder and ignore the nixpacks file; either way ffmpeg and ffprobe report healthy on `/api/integrations`, which really shells out to them.
 
 **Service 2 — frontend** (root directory `frontend`)
 
@@ -84,7 +86,9 @@ Attach a volume mounted at `/data`, or every redeploy starts from an empty datab
 | `BACKEND_API_BASE_URL` | `http://<backend-service>.railway.internal:8000` |
 | `BACKEND_API_KEY` | same value as `DASHBOARD_API_KEY` |
 
-Generate a public domain for this service only. The backend needs no public domain — the browser never talks to it directly, only the frontend's server-side proxy route does. If private networking gives you trouble, the backend's own public URL works as `BACKEND_API_BASE_URL` too; the API is key-protected either way.
+Set the service's root directory to `frontend`, and generate a public domain for this service only. The backend needs no public domain — the browser never talks to it directly, only the frontend's server-side proxy route does. If private networking gives you trouble, the backend's own public URL works as `BACKEND_API_BASE_URL` too; the API is key-protected either way.
+
+One trap worth knowing: if the shell you set `BACKEND_API_KEY` from writes a UTF-8 BOM, the value is unusable as an HTTP header and every proxied request fails with a 502 that looks exactly like a networking fault. The proxy route reports the underlying cause now, which is what makes that distinguishable.
 
 **What reports as unavailable in a deployment:** the Integrations page shows `youtube_api` as an error, because the OAuth refresh token lives in `secrets/` on your machine and is never committed. The dashboard is read-only, so this affects nothing else.
 
