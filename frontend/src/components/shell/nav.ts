@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   BarChart3,
   Bot,
+  ClipboardCheck,
   Cpu,
   FileText,
   Gauge,
@@ -17,6 +18,7 @@ import {
 
 export const NAV_ITEMS = [
   { href: "/overview", label: "Overview", icon: Gauge },
+  { href: "/approvals", label: "Approvals", icon: ClipboardCheck },
   { href: "/orchestrator", label: "Orchestrator", icon: Cpu },
   { href: "/channels", label: "Channels", icon: Tv },
   { href: "/agents", label: "Agents", icon: Bot },

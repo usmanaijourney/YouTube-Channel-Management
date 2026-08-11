@@ -6,6 +6,7 @@ const STATUS_COLOR: Record<string, string> = {
   active: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
   uploaded: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
   idle: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
+  approved: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
 
   // blue — in progress
   running: "bg-sky-500/15 text-sky-400 border-sky-500/30",
@@ -26,6 +27,7 @@ const STATUS_COLOR: Record<string, string> = {
   critical: "bg-red-500/15 text-red-400 border-red-500/30",
   timeout: "bg-red-500/15 text-red-400 border-red-500/30",
   cancelled: "bg-red-500/15 text-red-400 border-red-500/30",
+  rejected: "bg-red-500/15 text-red-400 border-red-500/30",
 };
 
 const FALLBACK = "bg-slate-500/15 text-slate-400 border-slate-500/30"; // gray — inactive/unknown

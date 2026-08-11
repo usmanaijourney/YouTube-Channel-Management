@@ -9,7 +9,12 @@ from typing import Any, AsyncIterator, Optional
 import aiosqlite
 
 _MIGRATIONS_DIR = Path(__file__).parent / "migrations"
-_MIGRATION_FILES = ["0001_initial.sql", "0002_dashboard_foundation.sql", "0003_orchestrator.sql"]
+_MIGRATION_FILES = [
+    "0001_initial.sql",
+    "0002_dashboard_foundation.sql",
+    "0003_orchestrator.sql",
+    "0004_approvals.sql",
+]
 
 # `DB_PATH` lets a deployment point the SQLite file at a mounted volume
 # (e.g. /data/youtube_orchestration.db on Railway) instead of the repo-relative
@@ -202,12 +207,15 @@ async def list_health(conn: aiosqlite.Connection) -> list[dict[str, Any]]:
 
 async def upsert_schedule_config(conn: aiosqlite.Connection, channel_id: str, enabled: bool,
                                   preferred_hours_utc: list[int]) -> None:
+    """`enabled` is the initial value only. Once the row exists the operator owns
+    that flag via the dashboard, so re-running with the config file must not
+    silently undo a pause."""
     await conn.execute(
         """
         INSERT INTO schedules (channel_id, enabled, preferred_hours_utc, last_run_status)
         VALUES (?, ?, ?, 'idle')
         ON CONFLICT(channel_id) DO UPDATE SET
-            enabled=excluded.enabled, preferred_hours_utc=excluded.preferred_hours_utc
+            preferred_hours_utc=excluded.preferred_hours_utc
         """,
         (channel_id, 1 if enabled else 0, json.dumps(preferred_hours_utc)),
     )
@@ -261,3 +269,94 @@ async def upsert_orchestrator_status(conn: aiosqlite.Connection, status: str, st
 async def get_orchestrator_status(conn: aiosqlite.Connection) -> Optional[dict[str, Any]]:
     row = await (await conn.execute("SELECT * FROM orchestrator_status WHERE id = 1")).fetchone()
     return dict(row) if row else None
+
+
+def _approval_row(row: aiosqlite.Row) -> dict[str, Any]:
+    approval = dict(row)
+    approval["payload"] = json.loads(approval.pop("payload_json"))
+    return approval
+
+
+async def request_approval(conn: aiosqlite.Connection, task_id: str, channel_id: str,
+                            stage: str, payload: dict[str, Any]) -> None:
+    """Opens a gate. Re-asking the same gate replaces the previous request, so a
+    task re-run after a rejection isn't blocked by its own stale decision."""
+    await conn.execute(
+        """
+        INSERT INTO approvals (task_id, channel_id, stage, status, payload_json)
+        VALUES (?, ?, ?, 'pending', ?)
+        ON CONFLICT(task_id, stage) DO UPDATE SET
+            status='pending', payload_json=excluded.payload_json,
+            requested_at=datetime('now'), decided_at=NULL, decided_by=NULL, note=NULL
+        """,
+        (task_id, channel_id, stage, json.dumps(payload, default=str)),
+    )
+    await conn.commit()
+
+
+async def get_approval(conn: aiosqlite.Connection, task_id: str, stage: str) -> Optional[dict[str, Any]]:
+    row = await (await conn.execute(
+        "SELECT * FROM approvals WHERE task_id = ? AND stage = ?", (task_id, stage)
+    )).fetchone()
+    return _approval_row(row) if row else None
+
+
+async def list_approvals(conn: aiosqlite.Connection, status: Optional[str] = None) -> list[dict[str, Any]]:
+    sql = "SELECT * FROM approvals"
+    params: tuple[Any, ...] = ()
+    if status:
+        sql += " WHERE status = ?"
+        params = (status,)
+    sql += " ORDER BY requested_at DESC"
+    rows = await (await conn.execute(sql, params)).fetchall()
+    return [_approval_row(row) for row in rows]
+
+
+async def decide_approval(conn: aiosqlite.Connection, task_id: str, stage: str, status: str,
+                           decided_by: str, note: Optional[str] = None) -> bool:
+    """Returns False if the gate was already decided, so a late second click
+    can't overturn a decision the pipeline has already acted on."""
+    cursor = await conn.execute(
+        """
+        UPDATE approvals
+           SET status = ?, decided_at = datetime('now'), decided_by = ?, note = ?
+         WHERE task_id = ? AND stage = ? AND status = 'pending'
+        """,
+        (status, decided_by, note, task_id, stage),
+    )
+    await conn.commit()
+    return cursor.rowcount > 0
+
+
+async def insert_audit_log(conn: aiosqlite.Connection, actor: str, action: str,
+                            resource_type: str, resource_id: Optional[str],
+                            details: Optional[dict[str, Any]] = None) -> None:
+    await conn.execute(
+        """
+        INSERT INTO audit_logs (actor, action, resource_type, resource_id, details)
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        (actor, action, resource_type, resource_id,
+         json.dumps(details, default=str) if details is not None else None),
+    )
+    await conn.commit()
+
+
+async def list_audit_logs(conn: aiosqlite.Connection, limit: int = 100) -> list[dict[str, Any]]:
+    rows = await (await conn.execute(
+        "SELECT * FROM audit_logs ORDER BY id DESC LIMIT ?", (limit,)
+    )).fetchall()
+    logs = []
+    for row in rows:
+        log = dict(row)
+        log["details"] = json.loads(log["details"]) if log["details"] else None
+        logs.append(log)
+    return logs
+
+
+async def set_schedule_enabled(conn: aiosqlite.Connection, channel_id: str, enabled: bool) -> bool:
+    cursor = await conn.execute(
+        "UPDATE schedules SET enabled = ? WHERE channel_id = ?", (1 if enabled else 0, channel_id)
+    )
+    await conn.commit()
+    return cursor.rowcount > 0

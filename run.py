@@ -9,6 +9,7 @@ import asyncio
 import json
 
 from channel_manager.config_schema import load_channel_config
+from channel_manager.remote_approval import db_approval_callback
 from channel_manager.workflow import run_pipeline
 from common.db import models as db
 from common.orchestrator_client import (
@@ -37,10 +38,16 @@ async def _auto_approval(task_id: str, stage: str, payload: dict) -> bool:
 async def main() -> None:
     parser = argparse.ArgumentParser(description="Run one video through the channel pipeline.")
     parser.add_argument("--channel-config", default="config/channels/channel-001.yaml")
-    parser.add_argument("--auto-approve", action="store_true", help="Skip interactive approval prompts")
+    parser.add_argument("--auto-approve", action="store_true", help="Skip approval gates entirely")
+    parser.add_argument("--cli-approve", action="store_true",
+                         help="Answer the approval gates at this terminal instead of from the dashboard "
+                              "(the default waits for a dashboard decision, so a run doesn't need "
+                              "anyone at this machine)")
     parser.add_argument("--no-orchestrator", action="store_true",
                          help="Skip requesting a production slot from the Master Orchestrator "
                               "(for quick local testing without that service running)")
+    parser.add_argument("--force", action="store_true",
+                         help="Run even if the channel is paused in the dashboard")
     parser.add_argument("--orchestrator-url", default=DEFAULT_ORCHESTRATOR_URL)
     args = parser.parse_args()
 
@@ -73,8 +80,23 @@ async def main() -> None:
                 preferred_hours_utc=channel_config["schedule"]["preferred_hours_utc"],
             )
 
+            schedule = next(
+                (s for s in await db.list_schedules(conn) if s["channel_id"] == channel_id), None
+            )
+            if schedule and not schedule["enabled"] and not args.force:
+                raise SystemExit(
+                    f"Channel '{channel_id}' is paused in the dashboard — resume it there, "
+                    f"or pass --force to run anyway."
+                )
+
             await db.mark_schedule_running(conn, channel_config["channel_id"])
-            approval = _auto_approval if args.auto_approve else _cli_approval
+            if args.auto_approve:
+                approval = _auto_approval
+            elif args.cli_approve:
+                approval = _cli_approval
+            else:
+                approval = db_approval_callback(conn, channel_id)
+                print("\n--- Approval gates will wait for a decision in the dashboard ---")
             result = await run_pipeline(conn, channel_config, approval_callback=approval)
             await db.mark_schedule_result(
                 conn, channel_config["channel_id"],

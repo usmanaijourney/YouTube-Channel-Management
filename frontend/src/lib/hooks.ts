@@ -53,6 +53,18 @@ export function useOrchestrator() {
   return useSWR("orchestrator", api.orchestrator, { refreshInterval: REFRESH_MS });
 }
 
+/** Pending gates poll faster than everything else: this is the one screen where
+ * a stale view means a production slot sits blocked waiting on you. */
+export function useApprovals(status?: string) {
+  return useSWR(["approvals", status ?? "all"], () => api.approvals(status), {
+    refreshInterval: 5_000,
+  });
+}
+
+export function useAuditLogs() {
+  return useSWR("audit-logs", api.auditLogs, { refreshInterval: REFRESH_MS });
+}
+
 /** Aggregated client-side across every channel — no global /api/agents endpoint exists yet. */
 export function useAllAgents() {
   return useSWR(

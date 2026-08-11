@@ -1,4 +1,28 @@
 export type HealthStatus = "healthy" | "error" | "mocked";
+export type ApprovalStatus = "pending" | "approved" | "rejected" | "expired";
+
+export interface Approval {
+  id: number;
+  task_id: string;
+  channel_id: string;
+  stage: string;
+  status: ApprovalStatus;
+  payload: Record<string, unknown>;
+  requested_at: string;
+  decided_at: string | null;
+  decided_by: string | null;
+  note: string | null;
+}
+
+export interface AuditLogEntry {
+  id: number;
+  actor: string;
+  action: string;
+  resource_type: string;
+  resource_id: string | null;
+  details: Record<string, unknown> | null;
+  created_at: string;
+}
 export type TaskState = string; // backend uses free-form state strings (CREATED, TOPIC_RESEARCH, ..., CLOSED, FAILED)
 
 export interface SystemHealth {

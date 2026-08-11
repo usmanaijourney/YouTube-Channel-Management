@@ -1,6 +1,8 @@
 import type {
   Alert,
   AgentDetail,
+  Approval,
+  AuditLogEntry,
   ChannelDetail,
   ChannelSummary,
   IntegrationStatus,
@@ -19,7 +21,11 @@ export class ApiError extends Error {
   }
 }
 
-async function proxyFetch<T>(path: string, params?: Record<string, string | undefined>): Promise<T> {
+async function proxyFetch<T>(
+  path: string,
+  params?: Record<string, string | undefined>,
+  init?: { method: "POST"; body: unknown }
+): Promise<T> {
   const url = new URL(`/api/proxy/${path}`, window.location.origin);
   if (params) {
     for (const [key, value] of Object.entries(params)) {
@@ -29,7 +35,10 @@ async function proxyFetch<T>(path: string, params?: Record<string, string | unde
 
   let res: Response;
   try {
-    res = await fetch(url.toString());
+    res = await fetch(
+      url.toString(),
+      init ? { method: init.method, body: JSON.stringify(init.body) } : undefined
+    );
   } catch {
     throw new ApiError(0, "Network error — could not reach the dashboard server");
   }
@@ -60,4 +69,17 @@ export const api = {
   integrations: () => proxyFetch<IntegrationStatus[]>("integrations"),
   schedules: () => proxyFetch<Schedule[]>("schedules"),
   orchestrator: () => proxyFetch<OrchestratorView>("orchestrator"),
+  approvals: (status?: string) => proxyFetch<Approval[]>("approvals", { status }),
+  auditLogs: () => proxyFetch<AuditLogEntry[]>("audit-logs"),
+
+  decideApproval: (taskId: string, stage: string, decision: "approved" | "rejected", note?: string) =>
+    proxyFetch<Approval>(`approvals/${taskId}/${stage}`, undefined, {
+      method: "POST",
+      body: { decision, note: note || null },
+    }),
+  setScheduleEnabled: (channelId: string, enabled: boolean) =>
+    proxyFetch<{ channel_id: string; enabled: boolean }>(`channels/${channelId}/schedule`, undefined, {
+      method: "POST",
+      body: { enabled },
+    }),
 };

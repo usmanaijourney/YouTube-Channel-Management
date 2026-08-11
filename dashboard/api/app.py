@@ -5,9 +5,10 @@ Run with: uvicorn dashboard.api.app:app --reload --port 8000
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from typing import AsyncIterator, Optional
+from typing import AsyncIterator, Literal, Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Query
+from pydantic import BaseModel
 
 from common.db import models as db
 from common.db.models import DEFAULT_DB_PATH, connect
@@ -110,3 +111,64 @@ async def schedules():
 async def orchestrator():
     async with connect(DB_PATH) as conn:
         return await queries.get_orchestrator(conn)
+
+
+# --- Write endpoints ---------------------------------------------------------
+# Single-operator system with one shared API key, so there is no user identity
+# to record; "operator" is the honest actor name rather than a fabricated one.
+ACTOR = "operator"
+
+
+class ApprovalDecision(BaseModel):
+    decision: Literal["approved", "rejected"]
+    note: Optional[str] = None
+
+
+class ScheduleToggle(BaseModel):
+    enabled: bool
+
+
+@app.get("/api/approvals")
+async def list_approvals(status: Optional[str] = Query(default=None)):
+    async with connect(DB_PATH) as conn:
+        return await db.list_approvals(conn, status)
+
+
+@app.post("/api/approvals/{task_id}/{stage}")
+async def decide_approval(task_id: str, stage: str, body: ApprovalDecision):
+    async with connect(DB_PATH) as conn:
+        approval = await db.get_approval(conn, task_id, stage)
+        if approval is None:
+            raise HTTPException(status_code=404, detail=f"no '{stage}' gate for task '{task_id}'")
+
+        decided = await db.decide_approval(conn, task_id, stage, body.decision,
+                                            decided_by=ACTOR, note=body.note)
+        if not decided:
+            # Already decided, or expired out from under the operator. 409 rather
+            # than a silent no-op, so the UI can say what actually happened.
+            raise HTTPException(
+                status_code=409,
+                detail=f"the '{stage}' gate for '{task_id}' is already {approval['status']}",
+            )
+
+        await db.insert_audit_log(conn, ACTOR, f"approval.{body.decision}", "task", task_id,
+                                   {"stage": stage, "note": body.note})
+        return await db.get_approval(conn, task_id, stage)
+
+
+@app.post("/api/channels/{channel_id}/schedule")
+async def set_schedule(channel_id: str, body: ScheduleToggle):
+    async with connect(DB_PATH) as conn:
+        updated = await db.set_schedule_enabled(conn, channel_id, body.enabled)
+        if not updated:
+            raise HTTPException(status_code=404, detail=f"no schedule for channel '{channel_id}'")
+
+        await db.insert_audit_log(conn, ACTOR, "schedule.resumed" if body.enabled else "schedule.paused",
+                                   "channel", channel_id)
+        return {"channel_id": channel_id, "enabled": body.enabled}
+
+
+@app.get("/api/audit-logs")
+async def audit_logs(limit: int = Query(default=100, ge=1, le=500)):
+    async with connect(DB_PATH) as conn:
+        return await db.list_audit_logs(conn, limit)

@@ -51,7 +51,9 @@ One video through the pipeline:
 .venv\Scripts\python.exe run.py --channel-config config/channels/channel-001.yaml
 ```
 
-Add `--auto-approve` to skip the interactive approval gates, or `--no-orchestrator` to run without the slot service.
+By default the approval gates wait for a decision on the dashboard's Approvals page, so a run doesn't need anyone at this machine. Add `--cli-approve` to answer them at the terminal instead, `--auto-approve` to skip them, `--force` to run a channel that's paused in the dashboard, or `--no-orchestrator` to run without the slot service.
+
+A gate left unanswered for six hours expires, and the run fails rather than holding a production slot indefinitely.
 
 ## Test
 

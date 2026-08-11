@@ -183,7 +183,7 @@ async def test_schedules(seeded_db):
 
 async def test_schedules_disabled_channel_has_no_next_run_estimate(seeded_db):
     async with db.connect(seeded_db) as conn:
-        await db.upsert_schedule_config(conn, "channel-001", enabled=False, preferred_hours_utc=[9, 16])
+        await db.set_schedule_enabled(conn, "channel-001", False)
 
     async with await _client() as client:
         resp = await client.get("/api/schedules")
