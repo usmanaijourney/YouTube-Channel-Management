@@ -31,9 +31,13 @@ export async function GET(
       headers: { "X-API-Key": apiKey },
       cache: "no-store",
     });
-  } catch {
+  } catch (error) {
+    // Include the underlying cause — a bare "could not reach" is impossible to
+    // diagnose in a deployment, where the difference between a DNS failure, a
+    // refused connection and a TLS error decides what you go and fix.
+    const cause = error instanceof Error ? (error.cause ?? error).toString() : String(error);
     return NextResponse.json(
-      { detail: `Could not reach backend at ${baseUrl}` },
+      { detail: `Could not reach backend at ${baseUrl}: ${cause}` },
       { status: 502 }
     );
   }
